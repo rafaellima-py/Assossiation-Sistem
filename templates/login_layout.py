@@ -1,11 +1,14 @@
 import dash
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 from app import *
+import request_api
 
 layout_login = dbc.Row(
     className='vh-100 align-items-center justify-content-center',  # Centraliza vertical e horizontalmente
     children=[
+        dcc.Location(id='login_redirect', refresh=True), 
+
         # Primeiro cartão com raio de borda apenas no lado esquerdo
         dbc.Card(
             style={
@@ -57,7 +60,6 @@ layout_login = dbc.Row(
                             dbc.InputGroup([
                                 dbc.InputGroupText(html.I(className='material-icons', children='lock')),  # Ícone de cadeado
                                 dbc.Input(type='password', placeholder='Senha', id='password_login'),
-                                html.P(id='result_login')
                             ], className='mb-3'),
                             
                             # Checkbox para "Lembrar login"
@@ -77,6 +79,8 @@ layout_login = dbc.Row(
                                 'margin-top': '10px',
                                 'background-color': '#508bfc'
                             }),
+
+                            html.P(id='result_login'),
                             
                             # Link para "Registrar-se"
                             html.A('Registrar-se agora', href='/register', className='d-block mt-3', style={'text-align': 'center'}),
@@ -91,18 +95,48 @@ layout_login = dbc.Row(
 # =============================== Callbaks ===================================== #
 
 @app.callback(
-    Output('result_login', 'children'),
-    Input('cpf_login', 'value'),
-    Input('password_login', 'value'),
-    Input('login', 'n_clicks')
+    [Output('result_login', 'children'), Output('login_redirect', 'pathname')],
+    [Input('login', 'n_clicks')],
+    [State('cpf_login', 'value'), State('password_login', 'value')]
 )
-def verify_login(cpf, password, n_clicks):
-    # Se o botão de login não foi clicado ainda, retorne uma mensagem vazia
-    if n_clicks is None or n_clicks == 0:
-        return ''
+def verify_login(n_clicks, cpf, password):
+    # Inicialmente, nenhuma mensagem de erro e nenhum redirecionamento
+    error_message = ''
+    redirect_url = None
     
-    # Verifica se CPF e senha estão corretos
-    if cpf == '12345678900' and password == 'senha_secreta':
-        return 'Login bem-sucedido!'
+    # Se o botão de login não foi clicado, retorne uma mensagem vazia e nenhum redirecionamento
+    if n_clicks is None or n_clicks == 0:
+        return '', None
+    
+    # Verificação do CPF
+    if not cpf:
+        error_message = 'CPF é obrigatório.'
     else:
-        return 'CPF ou senha incorretos.'
+        import re
+        cpf_pattern = re.compile(r'^\d{3}\.\d{3}\.\d{3}-\d{2}$')
+        if not cpf_pattern.match(cpf):
+            error_message = 'Formato de CPF inválido. Use 000.000.000-00.'
+    
+    # Verificação da senha
+    if not password:
+        error_message = 'Senha é obrigatória.'
+    else:
+        min_length = 8
+        if len(password) < min_length:
+            error_message = f'Senha deve ter pelo menos {min_length} caracteres.'
+    
+    # Se há uma mensagem de erro, retorne-a
+    if error_message:
+        return error_message, None
+    
+    # Chama a função de login da API com os dados fornecidos
+    response = request_api.login(cpf, password)
+    
+    # Verifica a resposta da API
+    if response.get('message') == 'sucesso':
+        # Retorna mensagem de sucesso e redireciona para '/dashboard'
+        return 'Login realizado com sucesso!', '/dashboard'
+    
+    else:
+        # Retorna a mensagem de erro retornada pela API
+        return response.get('message', 'Ocorreu um erro no login'), None

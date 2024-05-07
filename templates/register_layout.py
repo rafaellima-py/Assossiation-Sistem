@@ -1,7 +1,9 @@
-import dash
-from dash import html
+from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
+from app import *
+from request_api import cadastro
 
+# Layout do registro
 layout_register = dbc.Row(
     className='vh-100 align-items-center justify-content-center',  # Centraliza vertical e horizontalmente
     children=[
@@ -22,7 +24,7 @@ layout_register = dbc.Row(
                 )
             ]
         ),
-
+        
         # Segundo cartão com raio de borda apenas no lado direito
         dbc.Card(
             className='shadow',
@@ -48,46 +50,53 @@ layout_register = dbc.Row(
                             
                             # Campo de entrada para nome completo
                             dbc.InputGroup([
-                                dbc.InputGroupText(html.I(className='material-icons', children='person')),  # Ícone de pessoa
-                                dbc.Input(type='text', placeholder='Nome completo'),
+                                dbc.InputGroupText(html.I(className='bi bi-person')),  # Ícone de pessoa
+                                dbc.Input(type='text', placeholder='Nome completo', id='nome'),
                             ], className='mb-3'),
                             
                             # Campo de entrada para CPF com ícone de documento
                             dbc.InputGroup([
-                                dbc.InputGroupText(html.I(className='material-icons', children='badge')),  # Ícone de documento
-                                dbc.Input(type='text', placeholder='CPF'),
+                                dbc.InputGroupText(html.I(className='bi bi-card-text')),  # Ícone de documento
+                                dbc.Input(type='text', placeholder='CPF', id='cpf'),
                             ], className='mb-3'),
                             
                             # Campo de entrada para número de WhatsApp com ícone de telefone
                             dbc.InputGroup([
-                                dbc.InputGroupText(html.I(className='material-icons', children='phone')),  # Ícone de telefone
-                                dbc.Input(type='text', placeholder='WhatsApp'),
+                                dbc.InputGroupText(html.I(className='bi bi-telephone')),  # Ícone de telefone
+                                dbc.Input(type='text', placeholder='WhatsApp', id='whatsapp'),
+                            ], className='mb-3'),
+
+                            # Campo de entrada para data de nascimento com ícone de calendário
+                            dbc.InputGroup([
+                                dbc.InputGroupText(html.I(className='bi bi-calendar')),  # Ícone de calendário
+                                dbc.Input(type='date', placeholder='Data de nascimento', id='nascimento'),
                             ], className='mb-3'),
 
                             # Campo de entrada para senha com ícone de cadeado
                             dbc.InputGroup([
-                                dbc.InputGroupText(html.I(className='material-icons', children='lock')),  # Ícone de cadeado
-                                dbc.Input(type='password', placeholder='Senha'),
+                                dbc.InputGroupText(html.I(className='bi bi-lock')),  # Ícone de cadeado
+                                dbc.Input(type='password', placeholder='Senha', id='senha'),
                             ], className='mb-3'),
                             
                             # Campo de entrada para confirmação de senha com ícone de cadeado
                             dbc.InputGroup([
-                                dbc.InputGroupText(html.I(className='material-icons', children='lock')),  # Ícone de cadeado
-                                dbc.Input(type='password', placeholder='Confirme a senha'),
+                                dbc.InputGroupText(html.I(className='bi bi-lock')),  # Ícone de cadeado
+                                dbc.Input(type='password', placeholder='Confirme a senha', id='conf_senha'),
                             ], className='mb-3'),
                             
                             # Campo de entrada para verso do RG com ícone de documento
                             dbc.InputGroup([
-                                dbc.InputGroupText(html.I(className='material-icons', children='badge')),  # Ícone de documento
-                                dbc.Input(type='file', placeholder='Verso do RG'),
+                                dbc.InputGroupText(html.I(className='bi bi-card-text')),  # Ícone de documento
+                                dbc.Input(type='file', placeholder='Verso do RG', id='verso'),
                             ], className='mb-3'),
 
                             # Botão de registro
-                            dbc.Button('Registrar-se', color='primary', className='w-100', style={
+                            dbc.Button('Registrar-se', color='primary', id='register_btn', className='w-100', style={
                                 'margin-top': '10px',
                                 'background-color': '#508bfc'
                             }),
                         ]),
+                        html.P('', id='status_register'),
                         
                         # Link caso a pessoa já tenha uma conta
                         html.A('Já possui uma conta? Faça login', href='/', className='d-block mt-3', style={'text-align': 'center'}),
@@ -97,3 +106,54 @@ layout_register = dbc.Row(
         ),
     ],
 )
+
+
+@app.callback(
+    Output('status_register', 'children'),
+    [Input('register_btn', 'n_clicks')],
+    [State('nome', 'value'),
+     State('cpf', 'value'),
+     State('whatsapp', 'value'),
+     State('nascimento', 'value'),
+     State('senha', 'value'),
+     State('conf_senha', 'value'),
+     State('verso', 'value')]
+)
+def verificar_registro(n_clicks, nome, cpf, whatsapp, nascimento, senha, conf_senha, verso):
+    if n_clicks is None:
+        return ''  # Se o botão não foi clicado, não exibe mensagem
+    
+    mensagens_erro = {}
+    
+    # Verificar se os campos obrigatórios estão preenchidos
+    if not nome:
+        mensagens_erro['nome'] = 'Nome completo é obrigatório.'
+    if not cpf:
+        mensagens_erro['cpf'] = 'CPF é obrigatório.'
+    if not whatsapp:
+        mensagens_erro['whatsapp'] = 'Número de WhatsApp é obrigatório.'
+    if not nascimento:
+        mensagens_erro['nascimento'] = 'Data de nascimento é obrigatória.'
+    if not senha:
+        mensagens_erro['senha'] = 'Senha é obrigatória.'
+    if not conf_senha:
+        mensagens_erro['conf_senha'] = 'Confirmação de senha é obrigatória.'
+    if not verso:
+        mensagens_erro['verso'] = 'Foto do verso do RG é obrigatória.'
+        
+    # Verificar se as senhas correspondem
+    if senha and conf_senha and senha != conf_senha:
+        mensagens_erro['conf_senha'] = 'As senhas não correspondem.'
+    
+    # Se houver mensagens de erro, mostre-as
+    if mensagens_erro:
+        return html.Ul([html.Li(msg) for msg in mensagens_erro.values()])
+    
+    # Caso contrário, faça o registro
+    response_message = cadastro(cpf, senha, nome, whatsapp, nascimento, verso)
+    
+    # Verificar a resposta da API e retornar a mensagem correspondente
+    if response_message['message'] == 'Cadastro realizado com sucesso':
+        return 'Cadastro realizado com sucesso!'
+    else:
+        return response_message['message']
